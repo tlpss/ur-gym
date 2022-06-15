@@ -8,10 +8,10 @@ from camera_toolkit.aruco import get_aruco_marker_poses, get_aruco_marker_coords
 from camera_toolkit.reproject_to_z_plane import reproject_to_ground_plane
 from rtde_control import RTDEControlInterface as RTDEControl
 from rtde_receive import RTDEReceiveInterface as RTDEReceive
-from typing import Optional, Union, Tuple
-from gym.core import ObsType
+from typing import Any, Optional, Union, Tuple
 import numpy as np 
 import cv2
+from gym.spaces import Box
 import logging 
 
 
@@ -50,7 +50,7 @@ class URPushState(gym.Env):
 
     ### fixed properties  for UR Robot
         
-    robot_eef_z = 0.01
+    robot_eef_z = 0.02
     robot_eef_orientation_rotvec = [0,3.14,0.0] #eef pointing down
 
     home_pose = [-0.13, -0.21, 0.30, 0, 3.14, 0]
@@ -64,6 +64,7 @@ class URPushState(gym.Env):
     ### Object Properties
     object_radius = 0.05
 
+    max_episode_steps = 5
     def __init__(self, robot_ip:str = "10.42.0.161", random_goals= False) -> None:
         super().__init__()
 
@@ -89,6 +90,9 @@ class URPushState(gym.Env):
         self.aruco_in_camera_transform[:3, :3] = aruco_in_camera_orientation
         self.aruco_in_camera_transform[:3, 3] = aruco_in_camera_position
 
+
+        self.action_space = Box(low=np.array([0.0, 0.0]), high=np.array([1.0, 1.0]), dtype=np.float32)
+        self.observation_space  =Box(low=np.array([-0.5,-0.5,-0.5,-0.5]), high= np.array([0.5,0.5,0.5,0.5]), dtype=np.float32)
     
     def _get_observation(self):
         object_position = self._get_object_position()
@@ -120,9 +124,9 @@ class URPushState(gym.Env):
 
         return robot_frame_coords[0][:2]
 
-    def reset(self, *, seed: Optional[int] = None, return_info: bool = False, options: Optional[dict] = None) -> Union[ObsType, Tuple[ObsType, dict]]:
-        super().reset(seed=seed)
-
+    def reset(self):
+        #super().reset()
+        self.n_steps_in_episode = 0
         # reset goal position
         if self.use_random_goals:
             self.goal_position = self._get_random_object_position()
@@ -131,9 +135,7 @@ class URPushState(gym.Env):
         self._reset_object()
 
         observation = self._get_observation()
-        if return_info:
-            info = self._get_info()
-            return (observation,info)
+
         return observation
 
     def _reset_object(self):
@@ -159,7 +161,7 @@ class URPushState(gym.Env):
             if self._position_is_in_workspace(position, margin = 1.1 * (URPushState.object_radius + URPushState.robot_flange_radius +URPushState.robot_motion_margin)):
                 return position
 
-    def step(self, action: np.ndarray) -> Tuple[ObsType, float, bool, dict]:
+    def step(self, action: np.ndarray) -> Tuple[Any, float, bool, dict]:
         
         # do action
         # get new state
@@ -185,6 +187,8 @@ class URPushState(gym.Env):
             reward = (max_distance - distance_to_target) / max_distance
         else: 
             reward = 0.0
+
+        self.n_steps_in_episode += 1 
         return new_observation, reward, done, {}
 
     def _execute_primitive_motion(self,angle:float, length:float):
@@ -249,6 +253,7 @@ class URPushState(gym.Env):
 
     def _is_episode_finished(self, distance_to_target: float, object_position: np.ndarray):
         done = distance_to_target < URPushState.goal_l2_margin # goal reached 
+        done = done or self.n_steps_in_episode >= URPushState.max_episode_steps
         return done
 
 
