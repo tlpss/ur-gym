@@ -1,3 +1,6 @@
 numpy 
 ur_rtde==1.5.1
 gym
+tensorboard
+stable_baselines3
+git+https://github.com/tlpss/camera-toolkit.git
