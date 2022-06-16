@@ -28,12 +28,12 @@ class PushStateConfig:
     robot_space_y_lower = -0.48
     robot_space_y_upper = -0.22
 
-    goal_l2_margin = 0.05
+    goal_l2_margin = 0.02
 
     default_goal_in_robot_x = -0.050
     default_goal_in_robot_y = -0.350
 
-    max_episode_steps = 10
+    max_episode_steps = 20
 
 
 class URPushState(gym.Env):
@@ -141,7 +141,7 @@ class URPushState(gym.Env):
         self.n_steps_in_episode = 0
         # reset goal position
         if self.use_random_goals:
-            self.goal_position = self.get_random_object_position()
+            raise NotImplementedError
 
         # reset object
         self._reset_object()
@@ -163,14 +163,14 @@ class URPushState(gym.Env):
         if distance_to_target > PushStateConfig.goal_l2_margin:
             return
 
-        new_object_pose = self.get_random_object_position()
+        new_object_pose = self.get_random_object_position(self.goal_position)
         logging.debug(f"resetting object to {new_object_pose}")
 
         if not self._move_object_to_position(new_object_pose):
             raise ValueError("reset failed due to invalid motion, which should not happen..")
 
     @staticmethod
-    def get_random_object_position() -> np.ndarray:
+    def get_random_object_position(goal_position: np.ndarray) -> np.ndarray:
         """
         Brute-force sample positions until one is in the allowed object workspace
         """
@@ -183,7 +183,7 @@ class URPushState(gym.Env):
                 position,
                 margin=1.1
                 * (URPushState.object_radius + URPushState.robot_flange_radius + URPushState.robot_motion_margin),
-            ):
+            ) and not np.linalg.norm(position-goal_position) < PushStateConfig.goal_l2_margin:
                 return position
 
     def step(self, action: np.ndarray) -> Tuple[Any, float, bool, dict]:
@@ -191,6 +191,8 @@ class URPushState(gym.Env):
         performs action,
         returns observation, reward, is episode finished?, info dict (empty)
         """
+        self.n_steps_in_episode += 1
+
         normalized_angle, normalized_length = action
         angle = normalized_angle * 2 * np.pi
         length = normalized_length * PushStateConfig.max_pushing_distance
@@ -206,7 +208,6 @@ class URPushState(gym.Env):
         # determine reward
         reward = self.calculate_reward(valid_action, distance_to_target)
 
-        self.n_steps_in_episode += 1
 
         return new_observation, reward, done, {}
 
@@ -328,9 +329,9 @@ class URPushState(gym.Env):
     @staticmethod
     def calculate_reward(valid_action: bool, distance_to_target:float) -> float:
         # determine reward
+
+        #TODO: change this to a potential function
+        # also: it seemed to improve convergence if I added an additional bonus fo reaching the goal.
         max_distance = 0.5  # approx largest distance possible
-        if valid_action:
-            reward = (max_distance - distance_to_target) / max_distance
-        else:
-            reward = 0.0
+        reward =  - distance_to_target / max_distance
         return reward
