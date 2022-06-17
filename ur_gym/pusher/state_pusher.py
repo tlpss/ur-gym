@@ -4,8 +4,8 @@ import pickle
 from random import random
 import time
 import gym
-#from camera_toolkit.zed2i import Zed2i, sl
-#from camera_toolkit.aruco import get_aruco_marker_poses, get_aruco_marker_coords
+from camera_toolkit.zed2i import Zed2i, sl
+from camera_toolkit.aruco import get_aruco_marker_poses, get_aruco_marker_coords
 from camera_toolkit.reproject_to_z_plane import reproject_to_ground_plane
 from rtde_control import RTDEControlInterface as RTDEControl
 from rtde_receive import RTDEReceiveInterface as RTDEReceive
@@ -48,8 +48,8 @@ class URPushState(gym.Env):
     """
 
     # specify calibration aruco marker position in UR base frame
-    aruco_in_robot_x = -0.02547
-    aruco_in_robot_y = -0.3647
+    aruco_in_robot_x = -0.0318
+    aruco_in_robot_y = -0.3648
     robot_to_aruco_translation = np.array([aruco_in_robot_x, aruco_in_robot_y, 0.0])
 
     # properties  for UR Robot
@@ -64,6 +64,7 @@ class URPushState(gym.Env):
 
     # Object Properties
     object_radius = 0.05
+    object_height = 0.045
 
     def __init__(self, robot_ip: str = "10.42.0.161", random_goals=False) -> None:
         super().__init__()
@@ -121,11 +122,12 @@ class URPushState(gym.Env):
             image_coords = get_aruco_marker_coords(img, cv2.aruco.DICT_5X5_250)
             if image_coords is None:
                 if i == 2:
-                    ValueError("Could not detect the aruco marker after 3 attempts. Is the marker visible?")
+                    raise ValueError("Could not detect the aruco marker after 3 attempts. Is the marker visible?")
                 logging.error("could not detect object aruco marker")
+                time.sleep(1.0)
             else:
                 break
-        aruco_frame_coords = reproject_to_ground_plane(image_coords, self.cam_matrix, self.aruco_in_camera_transform)
+        aruco_frame_coords = reproject_to_ground_plane(image_coords, self.cam_matrix, self.aruco_in_camera_transform, height = URPushState.object_height)
 
         robot_frame_coords = aruco_frame_coords + URPushState.robot_to_aruco_translation
 
@@ -203,7 +205,7 @@ class URPushState(gym.Env):
         new_object_position = self._get_object_position()
 
         distance_to_target = np.linalg.norm(new_object_position - self.goal_position)
-        done = self._is_episode_finished(distance_to_target, new_object_position)
+        done = self._is_episode_finished(self.n_steps_in_episode,distance_to_target)
 
         # determine reward
         reward = self.calculate_reward(valid_action, distance_to_target)
@@ -335,3 +337,8 @@ class URPushState(gym.Env):
         max_distance = 0.5  # approx largest distance possible
         reward =  - distance_to_target / max_distance
         return reward
+
+
+if __name__ == "__main__":
+    env = URPushState()
+    print(env._get_object_position())
