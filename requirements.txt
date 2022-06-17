@@ -4,6 +4,6 @@ gym~=0.24.0
 tensorboard
 stable_baselines3
 git+https://github.com/tlpss/camera-toolkit.git
-
+wandb
 pygame~=2.1.0
 setuptools~=58.0.4

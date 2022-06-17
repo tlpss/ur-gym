@@ -9,6 +9,10 @@ import numpy as np
 import pygame
 
 class SimPushState(gym.Env):
+    """
+
+    pygame render based on https://realpython.com/pygame-a-primer/
+    """
     pygame_scale = 2000
     def __init__(self) -> None:
         self.object_position = np.array([0.0, 0.0])
